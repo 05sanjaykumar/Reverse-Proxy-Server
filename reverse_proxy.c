@@ -59,10 +59,64 @@ int main() {
         printf("📦 Received (%d bytes):\n%s\n", bytes_received, buffer);
     }
 
-    // 6. Close sockets
+    // 6. Connect to backend (localhost:8000)
+
+    int backend_fd;
+    struct sockaddr_in backend_addr;
+
+    backend_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (backend_fd == -1){
+        perror("Backend socket creation failed");
+        close(client_fd);
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    backend_addr.sin_family = AF_INET;
+    backend_addr.sin_port = htons(8000);
+    backend_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Localhost
+
+    if (connect(backend_fd, (struct sockaddr*)&backend_addr, sizeof(backend_addr)) < 0) {
+        perror("Backend connection failed");
+        close(client_fd);
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+    printf("✅ Connected to backend server.\n");
+
+    // 7. Forward the request to the backend
+
+    write(backend_fd, buffer, bytes_received);  
+    printf("📤 Forwarded request to backend.\n");
+
+    // 8. Read response from backend
+
+    char *backend_buffer = malloc(BUFFER_SIZE);
+    if (!backend_buffer) {
+        perror("malloc failed");
+        close(backend_fd);
+        close(client_fd);
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
+    int backend_bytes = read(backend_fd, backend_buffer, BUFFER_SIZE - 1);
+    backend_buffer[backend_bytes] = '\0';
+
+    printf("📥 Received from backend (%d bytes):\n%s\n", backend_bytes, backend_buffer);
+
+
+    // 9. Send response back to original client
+    write(client_fd, backend_buffer, backend_bytes);
+    printf("📤 Sent response back to client.\n");
+
+    // 10. Cleanup
+    free(backend_buffer);
+    close(backend_fd);
+
     close(client_fd);
-    close(server_fd);
-    printf("🔒 Connection closed.\n");
+
 
     return 0;
 }
