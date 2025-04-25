@@ -101,14 +101,18 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    int backend_bytes = read(backend_fd, backend_buffer, BUFFER_SIZE - 1);
-    backend_buffer[backend_bytes] = '\0';
+    int total_read = 0,n;
+    while((n = read(backend_fd, backend_buffer + total_read, BUFFER_SIZE - total_read - 1)) > 0){
+        total_read+=n;
+        if(total_read>=BUFFER_SIZE-1)break;
+    }
 
-    printf("📥 Received from backend (%d bytes):\n%s\n", backend_bytes, backend_buffer);
+    backend_buffer[total_read] = '\0';
 
+    printf("📥 Received from backend (%d bytes):\n%s\n", total_read, backend_buffer);
 
     // 9. Send response back to original client
-    write(client_fd, backend_buffer, backend_bytes);
+    write(client_fd, backend_buffer, total_read);
     printf("📤 Sent response back to client.\n");
 
     // 10. Cleanup
