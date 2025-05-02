@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>             // for close()
-#include <arpa/inet.h>          // for inet_addr, sockaddr_in
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+
+
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
