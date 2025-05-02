@@ -10,8 +10,77 @@
 #define BACKEND_PORT 8000
 #define BUFFER_SIZE 4096
 
-void* handle_client(void* arg){
-    
+void* handle_client(void* arg)
+{
+    int client_fd = *(int*)arg;
+    free(arg);
+
+    char buffer[BUFFER_SIZE] = {0};
+
+    // 1. Read request from client
+    int bytes_received = read(client_fd, buffer, BUFFER_SIZE - 1);
+    if (bytes_received <= 0) {
+        perror("Read from client failed");
+        close(client_fd);
+        return NULL;
+    }
+
+    buffer[bytes_received] = '\0';
+    printf("📦 Received (%d bytes):\n%s\n", bytes_received, buffer);
+
+    // 2. Connect to backend
+    int backend_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (backend_fd == -1) {
+        perror("Backend socket creation failed");
+        close(client_fd);
+        return NULL;
+    }
+
+    struct sockaddr_in backend_addr;
+    backend_addr.sin_family = AF_INET;
+    backend_addr.sin_port = htons(BACKEND_PORT);
+    backend_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    if (connect(backend_fd, (struct sockaddr*)&backend_addr, sizeof(backend_addr)) < 0) {
+        perror("Backend connection failed");
+        close(client_fd);
+        close(backend_fd);
+        return NULL;
+    }
+
+    printf("✅ Connected to backend server.\n");
+
+    // 3. Forward request to backend
+    write(backend_fd, buffer, bytes_received);
+    printf("📤 Forwarded request to backend.\n");
+
+    // 4. Read response from backend
+    char *backend_buffer = malloc(BUFFER_SIZE);
+    if (!backend_buffer) {
+        perror("Malloc failed");
+        close(client_fd);
+        close(backend_fd);
+        return NULL;
+    }
+
+    int total_read = 0, n;
+    while ((n = read(backend_fd, backend_buffer + total_read, BUFFER_SIZE - total_read - 1)) > 0) {
+        total_read += n;
+        if (total_read >= BUFFER_SIZE - 1) break;
+    }
+    backend_buffer[total_read] = '\0';
+
+    printf("📥 Received from backend (%d bytes):\n%s\n", total_read, backend_buffer);
+
+    // 5. Send response back to client
+    write(client_fd, backend_buffer, total_read);
+    printf("📤 Sent response back to client.\n");
+
+    // 6. Cleanup
+    free(backend_buffer);
+    close(backend_fd);
+    close(client_fd);
+    return NULL;
 }
 
 int main()
