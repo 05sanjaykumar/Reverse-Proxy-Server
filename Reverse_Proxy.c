@@ -33,6 +33,12 @@ int main()
     }
     printf("✅ Bind successful on port %d.\n", PORT);
 
+    if (listen(server_fd, 10) < 0) {  // 10 is the backlog queue size
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
+
      // 4. Accept a client
      client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
      if (client_fd < 0) {
