@@ -33,79 +33,90 @@ int main()
     }
     printf("✅ Bind successful on port %d.\n", PORT);
 
-     // 4. Accept a client
-     client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
-     if (client_fd < 0) {
-         perror("Accept failed");
-         close(server_fd);
-         exit(EXIT_FAILURE);
-     }
-     printf("✅ Connection accepted.\n");
+    if (listen(server_fd, 10) < 0) {  // 10 is the backlog queue size
+        perror("Listen failed");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
 
-      // 5. Read data
-    int bytes_received = read(client_fd, buffer, BUFFER_SIZE - 1);
-    if (bytes_received < 0) {
-        perror("Read failed");
-    } else {
+    while (1) {
+        client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &client_len);
+        if (client_fd < 0) {
+            perror("Accept failed");
+            continue; // try next connection instead of exiting
+        }
+        printf("✅ Connection accepted.\n");
+    
+        // 5. Read data
+        int bytes_received = read(client_fd, buffer, BUFFER_SIZE - 1);
+        if (bytes_received < 0) {
+            perror("Read failed");
+            close(client_fd);
+            continue;
+        }
         buffer[bytes_received] = '\0';
         printf("📦 Received (%d bytes):\n%s\n", bytes_received, buffer);
-    }
-
-    // 6. Connect to backend (localhost:8000)
-    int backend_fd;
-    struct sockaddr_in backend_addr;
-
-    backend_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (backend_fd == -1) {
-        perror("Backend socket creation failed");
-        close(client_fd);
-        close(server_fd);
-        exit(EXIT_FAILURE);
-    }
-
-    backend_addr.sin_family = AF_INET;
-    backend_addr.sin_port = htons(8000);
-    backend_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // Localhost
-
-    if (connect(backend_fd, (struct sockaddr*)&backend_addr, sizeof(backend_addr)) < 0) {
-        perror("Backend connection failed");
-        close(client_fd);
-        close(server_fd);
-        exit(EXIT_FAILURE);
-    }
-    printf("✅ Connected to backend server.\n");
-
-    // 7. Forward the request to the backend
-    write(backend_fd, buffer, bytes_received);
-    printf("📤 Forwarded request to backend.\n");
-
-    // 8. Read response from backend
-    char *backend_buffer = malloc(BUFFER_SIZE); // 👈 heap allocation now
-    if (!backend_buffer) {
-        perror("malloc failed");
+    
+        // 6. Select backend and connect
+        int backend_fd;
+        struct sockaddr_in backend_addr;
+        backend_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (backend_fd == -1) {
+            perror("Backend socket creation failed");
+            close(client_fd);
+            continue;
+        }
+    
+        // Backend ports and round-robin
+        int backend_ports[] = {8000, 8001, 8002};
+        int backend_count = sizeof(backend_ports) / sizeof(backend_ports[0]);
+        static int current_backend = 0;
+        int selected_port = backend_ports[current_backend];
+        current_backend = (current_backend + 1) % backend_count;
+    
+        backend_addr.sin_family = AF_INET;
+        backend_addr.sin_port = htons(selected_port);
+        backend_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    
+        printf("➡️ Routing to backend on port %d\n", selected_port);
+    
+        if (connect(backend_fd, (struct sockaddr*)&backend_addr, sizeof(backend_addr)) < 0) {
+            perror("Backend connection failed");
+            close(client_fd);
+            close(backend_fd);
+            continue;
+        }
+        printf("✅ Connected to backend server.\n");
+    
+        // Forward request and relay response
+        write(backend_fd, buffer, bytes_received);
+        printf("📤 Forwarded request to backend.\n");
+    
+        char *backend_buffer = malloc(BUFFER_SIZE);
+        if (!backend_buffer) {
+            perror("malloc failed");
+            close(backend_fd);
+            close(client_fd);
+            continue;
+        }
+    
+        int total_read = 0, n;
+        while ((n = read(backend_fd, backend_buffer + total_read, BUFFER_SIZE - total_read - 1)) > 0) {
+            total_read += n;
+            if (total_read >= BUFFER_SIZE - 1) break;
+        }
+        backend_buffer[total_read] = '\0';
+    
+        printf("📥 Received from backend (%d bytes):\n%s\n", total_read, backend_buffer);
+    
+        write(client_fd, backend_buffer, total_read);
+        printf("📤 Sent response back to client.\n");
+    
+        // Cleanup for this connection
+        free(backend_buffer);
         close(backend_fd);
         close(client_fd);
-        close(server_fd);
-        exit(EXIT_FAILURE);
     }
-    int total_read = 0, n;
-    while ((n = read(backend_fd, backend_buffer + total_read, BUFFER_SIZE - total_read - 1)) > 0) {
-        total_read += n;
-        if (total_read >= BUFFER_SIZE - 1) break; // buffer full
-    }
-    backend_buffer[total_read] = '\0';
-
-    printf("📥 Received from backend (%d bytes):\n%s\n", total_read, backend_buffer);
-
-    // 9. Send response back to original client
-    write(client_fd, backend_buffer, total_read);
-    printf("📤 Sent response back to client.\n");
-
-    // 10. Cleanup
-    free(backend_buffer);
-    close(backend_fd);
-    close(client_fd);
-
     return 0;
 
 }
