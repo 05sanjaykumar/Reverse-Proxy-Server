@@ -31,24 +31,6 @@ As real-world complexity grows, reverse proxies evolve into *full-blown beasts*.
 - What if a backend takes too long or crashes?
 - Retry a different server or show an error gracefully.
 
-### 4. **Caching**
-- Store common responses temporarily and serve them directly.
-- Reduces backend load massively.
-
-### 5. **Header Rewriting**
-- Add/remove/modify HTTP headers for logging, security, etc.
-- Example: inject `X-Forwarded-For`, strip cookies, etc.
-
-### 6. **TLS / HTTPS Termination**
-- Accept HTTPS traffic, decrypt it at the proxy, and forward plain HTTP to backend.
-- Useful for centralizing TLS certs.
-
-### 7. **Rate Limiting / Throttling**
-- Prevent abuse (too many requests from a single IP).
-
-### 8. **Request Inspection**
-- Modify request bodies (e.g., replace JSON fields).
-- Implement security rules (e.g., block based on user-agent).
 
 ---
 
